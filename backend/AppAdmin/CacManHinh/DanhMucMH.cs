@@ -5,7 +5,7 @@ namespace AppAdmin.CacManHinh;
 // ===================================================================== LOAI SAN PHAM
 public sealed class LoaiSpMH : ManHinh
 {
-    private sealed record Dong(LoaiSpDTO Loai, int SoSku, int SoMau);
+    private sealed record Dong(LoaiSpDTO Loai, int SoSku, int SoMau, List<SanPhamDTO> Sps);
 
     private readonly Luoi<Dong> _luoi = new() { Khoa = d => d.Loai.MaLoaiSp };
 
@@ -20,7 +20,23 @@ public sealed class LoaiSpMH : ManHinh
         _luoi.Them("Mã loại", d => d.Loai.MaLoaiSp, 100).Them("Tên loại sản phẩm", d => d.Loai.TenLoaiSp, 300, fill: true)
             .So("Số mẫu", d => d.SoMau, 90).So("Số SKU (size × màu)", d => d.SoSku, 150);
         _luoi.MoDong += _ => Sua();
+        _luoi.XemNhanh = TheLoai;
         NoiDung.Controls.Add(BoCuc.KhungBang(_luoi.Grid));
+    }
+
+    // The xem nhanh: cac mau thuoc loai, ton kho, khoang gia (tu danh sach san pham da tai, 0 cau SQL)
+    private static TheXemNhanh.NoiDung TheLoai(Dong d)
+    {
+        var dangBan = d.Sps.Where(s => s.TrangThai == "DANG_BAN").ToList();
+        var mau = d.Sps.GroupBy(s => s.TenSp).Select(g => g.Key).ToList();
+        var dongs = new List<TheXemNhanh.Dong>
+        {
+            new("Số mẫu / SKU", $"{d.SoMau} mẫu · {d.SoSku} SKU ({dangBan.Count} đang bán)"),
+            new("Tổng tồn kho", $"{d.Sps.Sum(s => s.SoLuong):N0} cái"),
+            new("Khoảng giá", d.Sps.Count == 0 ? null : $"{GiaoDien.Tien(d.Sps.Min(s => s.DonGia))} - {GiaoDien.Tien(d.Sps.Max(s => s.DonGia))}"),
+            new("Các mẫu", mau.Count == 0 ? "Chưa có sản phẩm" : string.Join("\n", mau.Take(6).Select(t => "• " + t)) + (mau.Count > 6 ? $"\n… và {mau.Count - 6} mẫu khác" : "")),
+        };
+        return new TheXemNhanh.NoiDung(d.Loai.TenLoaiSp, d.Loai.MaLoaiSp, dongs, GiaoDien.Do, d.SoSku == 0 ? "Trống" : null);
     }
 
     public override void LamMoi()
@@ -30,7 +46,7 @@ public sealed class LoaiSpMH : ManHinh
         _luoi.Nap(loais.Select(l =>
         {
             var cua = sps.Where(s => s.MaLoaiSp == l.MaLoaiSp).ToList();
-            return new Dong(l, cua.Count, cua.Select(s => s.TenSp).Distinct().Count());
+            return new Dong(l, cua.Count, cua.Select(s => s.TenSp).Distinct().Count(), cua);
         }));
     }
 

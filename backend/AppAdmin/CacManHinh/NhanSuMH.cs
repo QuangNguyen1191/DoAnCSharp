@@ -398,6 +398,9 @@ public sealed class TaiKhoanMH : ManHinh
     private readonly Luoi<TaiKhoanDTO> _luoi = new() { Khoa = t => t.MaTk };
     private readonly Button _khoa;
     private List<TaiKhoanDTO> _tatCa = new();
+    // Ho so nhan vien / khach hang tai san 1 lan cung danh sach tai khoan: re chuot xem nhanh 0 cau SQL
+    private Dictionary<string, NhanVienDTO> _nvTheoMa = new();
+    private Dictionary<string, KhachHangDTO> _khTheoMa = new();
 
     public override Control OTim => _tim.O;
 
@@ -416,6 +419,7 @@ public sealed class TaiKhoanMH : ManHinh
             .TrangThai("Vai trò", t => t.VaiTro, Nhan.VaiTro, 140).Them("Mã NV / KH", t => t.MaNv ?? t.MaKh, 100)
             .TrangThai("Trạng thái", t => t.TrangThai, Nhan.TrangThaiTaiKhoan, 100).Ngay("Ngày tạo", t => t.NgayTao, 130, coGio: true);
         _luoi.ChonThayDoi += t => _khoa.Text = t?.TrangThai == "KHOA" ? "Mở khóa  (Delete)" : "Khóa  (Delete)";
+        _luoi.XemNhanh = TheTaiKhoan;
         NoiDung.Controls.Add(BoCuc.KhungBang(_luoi.Grid));
         NoiDung.Controls.Add(loc);
         _tim.CanTim += Loc;
@@ -425,9 +429,47 @@ public sealed class TaiKhoanMH : ManHinh
 
     public override void LamMoi()
     {
-        if (!ThaoTac.Chay("Tải tài khoản", () => new TaiKhoanBLL().LayTatCa(), out var ds)) return;
-        _tatCa = ds;
+        if (!ThaoTac.Chay("Tải tài khoản + hồ sơ", () => (new TaiKhoanBLL().LayTatCa(), new NhanVienBLL().LayTatCa(), new KhachHangBLL().LayTatCa()),
+                out var kq)) return;
+        _tatCa = kq.Item1;
+        _nvTheoMa = kq.Item2.GroupBy(n => n.MaNv).ToDictionary(g => g.Key, g => g.First());
+        _khTheoMa = kq.Item3.GroupBy(k => k.MaKh).ToDictionary(g => g.Key, g => g.First());
         Loc();
+    }
+
+    // Noi dung the xem nhanh khi re chuot vao 1 tai khoan: thong tin tai khoan + ho so nhan vien / khach hang
+    private TheXemNhanh.NoiDung TheTaiKhoan(TaiKhoanDTO t)
+    {
+        var dongs = new List<TheXemNhanh.Dong>
+        {
+            new("Trạng thái", Nhan.Ten(Nhan.TrangThaiTaiKhoan, t.TrangThai), Nhan.Mau(Nhan.TrangThaiTaiKhoan, t.TrangThai)),
+            new("Ngày tạo", GiaoDien.GioVn(t.NgayTao)),
+        };
+        if (t.MaNv != null && _nvTheoMa.TryGetValue(t.MaNv, out var n))
+        {
+            dongs.Add(new("Mã nhân viên", n.MaNv));
+            dongs.Add(new("Chức vụ", n.ChucVu));
+            dongs.Add(new("SĐT", n.Sdt));
+            dongs.Add(new("Email", n.Email));
+            dongs.Add(new("Ngày vào làm", GiaoDien.NgayVn(n.NgayVaoLam)));
+            dongs.Add(new("Công việc", Nhan.Ten(Nhan.TrangThaiNhanVien, n.TrangThai), Nhan.Mau(Nhan.TrangThaiNhanVien, n.TrangThai)));
+        }
+        else if (t.MaKh != null && _khTheoMa.TryGetValue(t.MaKh, out var k))
+        {
+            dongs.Add(new("Mã khách hàng", k.MaKh));
+            dongs.Add(new("SĐT", k.Sdt));
+            dongs.Add(new("Email", k.Email));
+            dongs.Add(new("Ngày sinh", GiaoDien.NgayVn(k.NgaySinh)));
+            dongs.Add(new("Hạng / điểm", $"{Nhan.Ten(Nhan.HangThanhVien, k.HangThanhVien)} · {k.DiemTichLuy:N0} điểm",
+                Nhan.Mau(Nhan.HangThanhVien, k.HangThanhVien)));
+            dongs.Add(new("Địa chỉ", string.Join(", ", new[] { k.DiaChi, k.TinhThanh }.Where(s => !string.IsNullOrWhiteSpace(s)))));
+        }
+        return new TheXemNhanh.NoiDung(
+            TieuDe: string.IsNullOrWhiteSpace(t.HoTen) ? t.TenDangNhap : t.HoTen,
+            PhuDe: $"@{t.TenDangNhap} · {t.MaTk}",
+            Dongs: dongs,
+            MauNhan: Nhan.Mau(Nhan.VaiTro, t.VaiTro),
+            Nhan: Nhan.Ten(Nhan.VaiTro, t.VaiTro));
     }
 
     private void Loc()

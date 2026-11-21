@@ -31,6 +31,13 @@ public sealed class Luoi<T> where T : class
     public event Action<T?>? ChonThayDoi;
     public event Action<T>? MoDong;
 
+    // The xem nhanh khi re chuot vao 1 dong (null = tat). Ham tra ve null thi khong hien the cho dong do.
+    // Mac dinh lay mau theo kieu T trong TheMau (don hang, hoa don, san pham ...).
+    public Func<T, TheXemNhanh.NoiDung?>? XemNhanh { get; set; } = TheMau.MacDinh<T>();
+    private TheXemNhanh? _the;
+    private readonly System.Windows.Forms.Timer _henThe = new() { Interval = 300 };
+    private int _dongRe = -1;
+
     public Luoi(bool nhieuDong = false)
     {
         Grid = TaoBang(nhieuDong);
@@ -66,6 +73,71 @@ public sealed class Luoi<T> where T : class
             TextRenderer.DrawText(e.Graphics, ChuKhiTrong, GiaoDien.Chu, vung, GiaoDien.ChuPhu,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         };
+        GanTheXemNhanh();
+    }
+
+    // ------------------------------------------------------------------ the xem nhanh (re chuot)
+    private void GanTheXemNhanh()
+    {
+        _henThe.Tick += (_, _) =>
+        {
+            _henThe.Stop();
+            HienThe();
+        };
+        Grid.CellMouseEnter += (_, e) =>
+        {
+            if (XemNhanh == null) return;
+            if (e.RowIndex < 0 || e.RowIndex >= _ds.Count)
+            {
+                AnThe();
+                return;
+            }
+            if (e.RowIndex == _dongRe) return;          // chuyen o trong cung 1 dong: giu the
+            _dongRe = e.RowIndex;
+            if (_the is { Visible: true }) HienThe();     // the dang hien: doi ngay sang nguoi khac
+            else _henThe.Start();                          // chua hien: doi chuot dung yen 0,3 giay
+        };
+        Grid.MouseLeave += (_, _) => AnThe();          // chuot ra khoi bang
+        Grid.MouseMove += (_, e) =>
+        {
+            // chuot vao vung trong duoi dong cuoi / tieu de cot
+            if (_dongRe >= 0 && Grid.HitTest(e.X, e.Y).RowIndex < 0) AnThe();
+        };
+        Grid.Scroll += (_, _) => AnThe();
+        Grid.MouseDown += (_, _) => AnThe();
+        Grid.KeyDown += (_, _) => AnThe();
+        Grid.VisibleChanged += (_, _) => { if (!Grid.Visible) AnThe(); };
+        Grid.Disposed += (_, _) =>
+        {
+            _henThe.Dispose();
+            _the?.Dispose();
+        };
+    }
+
+    private void HienThe()
+    {
+        // chi hien khi cua so chua bang dang duoc dung (khong hien the khi app nam sau cua so khac)
+        if (XemNhanh == null || _dongRe < 0 || _dongRe >= _ds.Count || !Grid.Visible || Grid.FindForm() is not { } form
+            || !form.ContainsFocus && Form.ActiveForm != form && Form.ActiveForm is not TheXemNhanh)
+        {
+            AnThe();
+            return;
+        }
+        var nd = XemNhanh(_ds[_dongRe]);
+        if (nd == null)
+        {
+            _the?.Hide();
+            return;
+        }
+        _the ??= new TheXemNhanh();
+        _the.HienTai(nd, Cursor.Position);
+    }
+
+    public void AnThe()
+    {
+        _henThe.Stop();
+        _dongRe = -1;
+        _the?.Hide();
     }
 
     // ------------------------------------------------------------------ khai bao cot
@@ -133,6 +205,7 @@ public sealed class Luoi<T> where T : class
     {
         var cu = Chon;
         var khoaCu = cu != null && Khoa != null ? Khoa(cu) : null;
+        AnThe();    // danh sach doi: the dang hien co the la cua dong khac
         _dangNap = true;
         try
         {
