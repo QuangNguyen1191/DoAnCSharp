@@ -1,6 +1,0 @@
-node_modules/
-dist/
-.env.local
-.env.*.local
-*.log
-tests/e2e/anh-chup/
