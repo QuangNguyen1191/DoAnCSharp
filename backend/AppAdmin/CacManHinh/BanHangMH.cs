@@ -60,9 +60,7 @@ public sealed class DonHangMH : ManHinh
         _dong.Them("Mã SP", c => c.MaSp, 70).Them("Sản phẩm", c => $"{c.TenSp} - {c.MauSac} - {c.KichCo}", 200, fill: true)
             .So("SL", c => c.SoLuong, 45).Tien("Đơn giá", c => c.DonGia, 95).Tien("Thành tiền", c => c.ThanhTien, 105);
         _chiTiet = new KhungChiTiet("Chi tiết đơn", _dong.Grid, "Sản phẩm trong đơn");
-        _chiTiet.HangNut.Controls.Add(_ruiRo);
-        _ruiRo.Dock = DockStyle.None;
-        _ruiRo.Width = 420;
+        _chiTiet.ThemVaoThongTin(_ruiRo);
 
         var trai = new Panel { Dock = DockStyle.Fill };
         trai.Controls.Add(BoCuc.KhungBang(_luoi.Grid));
